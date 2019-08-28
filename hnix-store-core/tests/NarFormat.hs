@@ -7,7 +7,7 @@ module NarFormat where
 
 import           Control.Applicative         ((<|>))
 import           Control.Concurrent          (threadDelay)
-import           Control.Exception           (SomeException, bracket, try)
+import           Control.Exception           (SomeException, bracket, finally, try)
 import           Control.Monad               (replicateM)
 import           Control.Monad.IO.Class      (liftIO)
 import           Data.Binary                 (put)
@@ -23,14 +23,17 @@ import qualified Data.Map                    as Map
 import           Data.Maybe                  (fromMaybe, isJust)
 import qualified Data.Text                   as T
 import           GHC.Stats                   (getRTSStats, max_live_bytes)
-import           System.Directory            (removeFile)
+import           System.Directory            (listDirectory, removeDirectoryRecursive, removeFile)
 import           System.Environment          (getEnv)
+import qualified System.IO.Temp              as Temp
+import qualified System.Posix.Process        as Unix
 import qualified System.Process              as P
 import           Test.Tasty                  as T
 import           Test.Tasty.Hspec
 import qualified Test.Tasty.HUnit            as HU
 import           Test.Tasty.QuickCheck
 import           Text.Read                   (readMaybe)
+import qualified Text.Printf                 as Printf
 
 import           System.Nix.Nar
 
@@ -80,6 +83,7 @@ spec_narEncoding = do
     it "matches directory" $ do
       encEqualsNixStore (Nar sampleDirectory) sampleDirectoryBaseline
 
+
 unit_nixStoreRegular :: HU.Assertion
 unit_nixStoreRegular = filesystemNixStore "regular" (Nar sampleRegular)
 
@@ -127,6 +131,23 @@ unit_streamLargeFileToNar =
       rmFiles     = removeFile bigFileName >> removeFile narFileName
 
 
+--------------------------------------------------------------------------------
+unit_streamManyFilesToNar :: HU.Assertion
+unit_streamManyFilesToNar =
+  Temp.withSystemTempDirectory "hnix-store" $ \baseDir -> do
+  let
+    narFile = baseDir ++ "/package_with_many_files"
+    rmFiles = removeDirectoryRecursive narFile
+    run =  do
+      filesPrecount <- countProcessFiles
+      nar <- localPackNar narEffectsIO narFile
+      filesPostcount <- countProcessFiles
+      return $ filesPostcount - filesPrecount
+  localUnpackNar narEffectsIO narFile (Nar (sampleDirWithManyFiles 100))
+  filesCreated <- run `finally` rmFiles
+  filesCreated `shouldSatisfy` (< 50)
+
+
 -- ****************  Utilities  ************************
 
 -- | Generate the ground-truth encoding on the fly with
@@ -167,6 +188,15 @@ assertBoundedMemory = do
 #else
       return ()
 #endif
+
+
+-- | Count file descriptors owned by the current process
+countProcessFiles :: IO Int
+countProcessFiles = do
+  pid <- Unix.getProcessID
+  let fdDir = "/proc/" ++ show pid ++ "/fd"
+  fds  <- P.readProcess "ls" [fdDir] ""
+  return $ length $ words fds
 
 
 -- | Read the binary output of `nix-store --dump` for a filepath
@@ -247,6 +277,15 @@ sampleLargeDir fSize = Directory $ Map.fromList $ [
       | n <- [1..100]]
      )
   ]
+
+--------------------------------------------------------------------------------
+sampleDirWithManyFiles :: Int -> FileSystemObject
+sampleDirWithManyFiles nFiles =
+  Directory $ Map.fromList $ mkFile <$> take nFiles [0..]
+  where
+    mkFile :: Int -> (FilePathPart, FileSystemObject)
+    mkFile i = (FilePathPart (BSC.pack (Printf.printf "%08d" i)),
+                sampleRegular)
 
 -- * For each sample above, feed it into `nix-store --dump`,
 -- and base64 encode the resulting NAR binary. This lets us
