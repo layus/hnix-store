@@ -33,6 +33,7 @@ library
                      , bytestring
                      , binary
                      , bytestring
+                     , cereal
                      , containers
                      , cryptohash-md5
                      , cryptohash-sha1
@@ -40,10 +41,14 @@ library
                      , directory
                      , filepath
                      , hashable
+                     , io-streams
                      , mtl
+                     , pipes
                      , regex-base
                      , regex-tdfa-text
                      , saltine
+                     , streaming
+                     , streaming-bytestring
                      , time
                      , text
                      , unix

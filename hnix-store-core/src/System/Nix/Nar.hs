@@ -18,31 +18,42 @@ module System.Nix.Nar (
   , localUnpackNar
   , narEffectsIO
   , putNar
+  , buildNarIO
+  , streamNarIO
   , FilePathPart(..)
   , filePathPart
   ) where
 
 import           Control.Applicative
-import           Control.Monad              (replicateM, replicateM_, (<=<))
-import qualified Data.Binary                as B
-import qualified Data.Binary.Get            as B
-import qualified Data.Binary.Put            as B
-import           Data.Bool                  (bool)
-import qualified Data.ByteString            as BS
-import qualified Data.ByteString.Char8      as BSC
-import qualified Data.ByteString.Lazy       as BSL
-import           Data.Foldable              (forM_)
-import qualified Data.Map                   as Map
-import           Data.Maybe                 (fromMaybe)
-import           Data.Monoid                ((<>))
-import qualified Data.Text                  as T
-import qualified Data.Text.Encoding         as E
-import           Data.Traversable           (forM)
-import           GHC.Int                    (Int64)
+import           Control.Monad         (replicateM, replicateM_, (<=<), when)
+import qualified Control.Monad.IO.Class as IO
+import qualified Data.Binary           as B
+import qualified Data.Binary.Get       as B
+import qualified Data.Binary.Put       as B
+import           Data.Bool             (bool)
+import qualified Data.ByteString.Builder as Builder
+import qualified Data.Serialize.Put as Serial
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.ByteString       as BS
+import qualified Data.ByteString.Lazy  as BSL
+import           Data.Foldable         (forM_, traverse_)
+import qualified Data.Map              as Map
+import           Data.Maybe            (fromMaybe)
+import           Data.Monoid           ((<>))
+import qualified Data.Text             as T
+import qualified Data.Text.Encoding    as E
+import           Data.Traversable      (forM)
+import           GHC.Int               (Int64)
 import           System.Directory
+import           System.IO.Streams     (InputStream, OutputStream)
+import qualified System.IO.Streams     as Streams
+import qualified Streaming.Prelude as Streaming
+import qualified Data.ByteString.Streaming as Streaming
+import qualified System.IO.Streams.ByteString     as Streams
 import           System.FilePath
-import           System.Posix.Files         (createSymbolicLink, fileSize, getFileStatus,
-                                             isDirectory, readSymbolicLink)
+import           System.Posix.Files    (createSymbolicLink, fileSize,
+                                        getFileStatus, isDirectory,
+                                        readSymbolicLink)
 
 
 data NarEffects (m :: * -> *) = NarEffects {
@@ -91,10 +102,93 @@ data FileSystemObject =
 data IsExecutable = NonExecutable | Executable
     deriving (Eq, Show)
 
+-- TODO: Document
+-- use io-streams
+buildNarIO
+  :: NarEffects IO
+  -> FilePath
+  -> IO BSL.ByteString
+buildNarIO effs basePath = do
+  stream <- Streams.fromGenerator (streamNarIO Streams.yield effs basePath)
+  fmap BSL.fromChunks $ Streams.toList stream
 
-instance B.Binary Nar where
-  get = getNar
-  put = putNar
+-- TODO: Document
+-- use streaming
+buildNarIO'
+  :: NarEffects IO
+  -> FilePath
+  -> IO BSL.ByteString
+buildNarIO' effs basePath =
+   Streaming.toLazy_ $
+   Streaming.fromChunks (streamNarIO Streaming.yield effs basePath)
+
+
+-- |
+streamNarIO
+  :: IO.MonadIO m
+  => (BS.ByteString -> m ())
+  -> NarEffects IO
+  -> FilePath
+  -> m ()
+streamNarIO yield effs basePath =  do
+  yield (str "nix-archive-1")
+  yield (str "(")
+  go basePath
+  yield (str ")")
+  where
+    -- go :: FilePath -> Streams.Generator BS.ByteString ()
+    go path = do
+      isDir     <- IO.liftIO $ narIsDir effs path
+      isSymLink <- IO.liftIO $ narIsSymLink effs path
+      let isRegular = not (isDir || isSymLink)
+      case isSymLink of
+        True -> do
+          target <- IO.liftIO $ narReadLink effs path
+          yield $
+            strs ["type", "symlink", "target", BSC.pack target]
+
+        False -> case isDir of
+
+          False -> do
+            isExec <- IO.liftIO $ isExecutable effs path
+            yield $ strs ["type","regular"]
+            when (isExec == Executable) (yield $ strs ["executable", ""])
+            fSize <- IO.liftIO $ narFileSize effs path
+            yield $ str "contents"
+            yield $ int fSize
+            yieldFile path fSize
+            -- mapM_ Streams.yield . BSL.toChunks =<< IO.liftIO (BSL.readFile path)
+
+          True -> do
+            fs <- IO.liftIO (narListDir effs path)
+            forM_ fs $ \f -> do
+              let fullName = path </> f
+              yield (strs ["name", BSC.pack fullName, "node"])
+              yield "("
+              go fullName
+              yield ")"
+
+
+
+    str :: BS.ByteString -> BS.ByteString
+    str t = let len =  BS.length t
+            in  int len <> padBS len t
+
+    padBS :: Int -> BS.ByteString -> BS.ByteString
+    padBS strSize bs = bs <> BS.replicate (padLen' strSize) 0
+
+    -- Read, yield, and pad the file
+    -- yieldFile :: FilePath -> Int64 -> Streams.Generator BS.ByteString ()
+    yieldFile path fsize = do
+      mapM_ yield . BSL.toChunks =<< IO.liftIO (BSL.readFile path)
+      yield (BS.replicate (padLen' (fromIntegral fsize)) 0)
+
+    strs :: [BS.ByteString] -> BS.ByteString
+    strs xs = BS.concat $ str <$> xs
+
+    int :: Integral a => a -> BS.ByteString
+    int n = Serial.runPut $ Serial.putInt64le (fromIntegral n)
+
 
 ------------------------------------------------------------------------------
 -- | Serialize Nar to lazy ByteString
@@ -135,8 +229,7 @@ putNar (Nar file) = header <> parens (putFile file)
             in int len <> pad len t
 
         putContents :: Int64 -> BSL.ByteString -> B.Put
-        putContents fSize bs = str "contents" <> int fSize <> (pad fSize bs)
-        -- putContents fSize bs = str "contents" <> int (BSL.length bs) <> (pad fSize bs)
+        putContents fSize bs = str "contents" <> int (BSL.length bs) <> (pad fSize bs)
 
         int :: Integral a => a -> B.Put
         int n = B.putInt64le $ fromIntegral n
@@ -215,6 +308,10 @@ getNar = fmap Nar $ header >> parens getFile
 -- | Distance to the next multiple of 8
 padLen :: Int64 -> Int64
 padLen n = (8 - n) `mod` 8
+
+-- Distance to the next multiple of 8
+padLen':: Int -> Int
+padLen' n = (8 - n) `mod` 8
 
 
 -- | Unpack a NAR into a non-nix-store directory (e.g. for testing)

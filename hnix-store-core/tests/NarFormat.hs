@@ -44,7 +44,7 @@ spec_narEncoding = do
 
   -- For a Haskell embedded Nar, check that (decode . encode === id)
   let roundTrip n = runGet getNar (runPut $ putNar n) `shouldBe` n
-
+ 
   -- For a Haskell embedded Nar, check that encoding it gives
   -- the same bytestring as `nix-store --dump`
   let encEqualsNixStore n b = runPut (putNar n) `shouldBe` b
@@ -110,7 +110,7 @@ unit_packSelfSrcDir = do
   case ver of
     Left  (e :: SomeException) -> print "No nix-store on system"
     Right _ -> do
-      hnixNar <- runPut . put <$> localPackNar narEffectsIO "src"
+      hnixNar <- runPut . putNar <$> localPackNar narEffectsIO "src"
       nixStoreNar <- getNixStoreDump "src"
       HU.assertEqual
         "src dir serializes the same between hnix-store and nix-store"
@@ -120,8 +120,9 @@ unit_packSelfSrcDir = do
 unit_streamLargeFileToNar :: HU.Assertion
 unit_streamLargeFileToNar =
   bracket (getBigFileSize >>= makeBigFile) (const rmFiles) $ \_ -> do
-    nar <- localPackNar narEffectsIO bigFileName
-    BSL.writeFile narFileName . runPut . put $ nar
+    -- nar <- localPackNar narEffectsIO bigFileName
+    -- BSL.writeFile narFileName . runPut . putNar $ nar
+    BSL.writeFile narFileName =<< buildNarIO narEffectsIO bigFileName
     assertBoundedMemory
     where
       bigFileName = "bigFile.bin"
@@ -140,10 +141,11 @@ unit_streamManyFilesToNar =
     rmFiles = removeDirectoryRecursive narFile
     run =  do
       filesPrecount <- countProcessFiles
-      nar <- localPackNar narEffectsIO narFile
+      -- nar <- localPackNar narEffectsIO narFile
+      _ <- buildNarIO narEffectsIO narFile
       filesPostcount <- countProcessFiles
       return $ filesPostcount - filesPrecount
-  localUnpackNar narEffectsIO narFile (Nar (sampleDirWithManyFiles 100))
+  localUnpackNar narEffectsIO narFile (Nar (sampleDirWithManyFiles 10000))
   filesCreated <- run `finally` rmFiles
   filesCreated `shouldSatisfy` (< 50)
 
