@@ -13,10 +13,11 @@ Description : Representation of Nix store paths.
 {-# LANGUAGE TypeInType #-} -- Needed for GHC 8.4.4 for some reason
 module System.Nix.Internal.StorePath where
 import System.Nix.Hash
-  ( HashAlgorithm(Truncated, SHA256)
+  ( HashAlgorithm(SHA256)
   , Digest
   , encodeBase32
   , SomeNamedDigest
+  , truncateDigest
   )
 import Text.Regex.Base.RegexLike (makeRegex, matchTest)
 import Text.Regex.TDFA.Text (Regex)
@@ -67,7 +68,7 @@ newtype StorePathName = StorePathName
   } deriving (Eq, Hashable, Ord)
 
 -- | The hash algorithm used for store path hashes.
-type StorePathHashAlgo = 'Truncated 20 'SHA256
+type StorePathHashAlgo = 'SHA256
 
 -- | A set of 'StorePath's.
 type StorePathSet storeDir = HashSet (StorePath storeDir)
@@ -189,6 +190,7 @@ storePathToRawFilePath (StorePath {..}) = BS.concat
     root = storeDirVal @storeDir
     hashPart = encodeUtf8 $ encodeBase32 storePathHash
     name = encodeUtf8 $ unStorePathName storePathName
+
 
 -- | Get a value-level representation of a 'KnownStoreDir'
 storeDirVal :: forall storeDir . (KnownStoreDir storeDir)

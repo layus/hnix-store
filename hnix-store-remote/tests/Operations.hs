@@ -50,5 +50,5 @@ spec_addToStore = do
                       | otherwise = True
       let repair = False
       res <- runStore $ (addToStore @'SHA256 name srcPath recursive filter repair :: MonadStore "/nix/store" (StorePath "/nix/store"))
-      res `shouldBe` (Right (StorePath (Digest $ T.encodeUtf8 "0mbh3xdb9fkqb2i3iwv6hhz7qiicca83") name),[Last])
+      show (fmap show res) `shouldBe` (Right "/nix/store/5x7ijzhz59rf3ldwp1qy28sz0abhcqd1-test-recursive-add",[Last])
 

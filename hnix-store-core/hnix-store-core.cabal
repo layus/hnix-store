@@ -25,6 +25,7 @@ library
                      , System.Nix.Nar
                      , System.Nix.ReadonlyStore
                      , System.Nix.Signature
+                     , System.Nix.StoreAPI
                      , System.Nix.StorePath
                      , System.Nix.StorePathMetadata
                      , System.Nix.Util

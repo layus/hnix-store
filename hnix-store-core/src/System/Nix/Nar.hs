@@ -34,6 +34,7 @@ import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Char8      as BSC
 import qualified Data.ByteString.Lazy       as BSL
 import           Data.Foldable              (forM_)
+import           Data.List                  (sort)
 import qualified Data.Map                   as Map
 import           Data.Maybe                 (fromMaybe)
 import           Data.Monoid                ((<>))
@@ -259,10 +260,10 @@ localPackNar' effs basePath pathFilter = Nar <$> localPackFSO basePath
                               <*> narFileSize effs path'
                               <*> narReadFile effs path'
         (True , _) -> fmap (Directory . Map.fromList) $ do
-          fs <- filter (pathFilter . (path' </>)) <$> narListDir effs path'
-          forM fs $ \fp ->
-            (FilePathPart (BSC.pack $  fp),) <$> localPackFSO (path' </> fp)
-
+          fs <- narListDir effs path'
+          let filePaths :: [FilePath] = sort $ filter (pathFilter . (path' </>)) fs
+          forM filePaths $ \fp ->
+            (FilePathPart (BSC.pack $ fp),) <$> localPackFSO (path' </> fp)
 
 
 narEffectsIO :: NarEffects IO

@@ -125,7 +125,7 @@ simpleOpArgs op args = do
 runOp :: WorkerOp -> MonadStore s ()
 runOp op = runOpArgs op $ return ()
 
-runOpArgs :: WorkerOp -> Put -> MonadStore s ()
+runOpArgs :: WorkerOp -> Put r -> MonadStore s r
 runOpArgs op args = do
 
   -- Temporary hack for printing the messages destined for nix-daemon socket
