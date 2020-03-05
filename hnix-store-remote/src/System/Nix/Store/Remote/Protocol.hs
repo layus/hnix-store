@@ -1,10 +1,14 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 module System.Nix.Store.Remote.Protocol (
     WorkerOp(..)
   , simpleOp
   , simpleOpArgs
   , runOp
   , runOpArgs
-  , runStore) where
+  , runStore
+  , runStoreOpts) where
 
 import           Control.Exception         (bracket)
 import           Control.Monad.Except
@@ -15,6 +19,7 @@ import           Data.Binary.Get
 import           Data.Binary.Put
 import qualified Data.ByteString.Char8     as BSC
 import qualified Data.ByteString.Lazy      as LBS
+import qualified Data.Text                 as T
 
 import           Network.Socket            hiding (send, sendTo, recv, recvFrom)
 import           Network.Socket.ByteString (recv)
@@ -23,6 +28,7 @@ import           System.Nix.Store.Remote.Logger
 import           System.Nix.Store.Remote.Types
 import           System.Nix.Store.Remote.Util
 import           System.Nix.Util
+import           System.Nix.StorePath
 
 protoVersion :: Int
 protoVersion = 0x115
@@ -34,8 +40,8 @@ workerMagic1 = 0x6e697863
 workerMagic2 :: Int
 workerMagic2 = 0x6478696f
 
-sockPath :: String
-sockPath = "/nix/var/nix/daemon-socket/socket"
+defaultSockPath :: String
+defaultSockPath = "/nix/var/nix/daemon-socket/socket"
 
 data WorkerOp =
     IsValidPath
@@ -139,25 +145,29 @@ runOpArgs op args = do
     args
 
   out <- processOutput
-  modify (++out)
+  liftIO $ print out
+  modify (\(a, b) -> (a, b++out))
   err <- gotError
   when err $ do
     Error _num msg <- head <$> getError
     throwError $ BSC.unpack $ LBS.toStrict msg
 
 runStore :: MonadStore a -> IO (Either String a, [Logger])
-runStore code = do
-  bracket (open sockPath) close run
+runStore = runStoreOpts defaultSockPath "/nix/store"
+
+runStoreOpts :: FilePath -> FilePath -> MonadStore a -> IO (Either String a, [Logger])
+runStoreOpts sockPath storeRootDir code = do
+  bracket (open sockPath) (close . storeSocket) run
   where
     open path = do
       soc <- socket AF_UNIX Stream 0
       connect soc (SockAddrUnix path)
-      return soc
+      return $ StoreConfig { storeSocket = soc, storeDir = storeRootDir } -- , storeDir = oo }
     greet = do
       sockPut $ putInt workerMagic1
-      soc <- ask
+      soc <- storeSocket <$> ask
       vermagic <- liftIO $ recv soc 16
-      let (magic2, daemonProtoVersion) = flip runGet (LBS.fromStrict vermagic) $ (,) <$> getInt <*> getInt
+      let (magic2, _daemonProtoVersion) = flip runGet (LBS.fromStrict vermagic) $ (,) <$> (getInt :: Get Int) <*> (getInt :: Get Int)
       unless (magic2 == workerMagic2) $ error "Worker magic 2 mismatch"
 
       sockPut $ putInt protoVersion -- clientVersion
@@ -167,4 +177,7 @@ runStore code = do
       processOutput
 
     run sock =
-      flip runReaderT sock $ flip runStateT [] $ runExceptT (greet >> code)
+      fmap (\(res, (handle, logs)) -> (res, logs))
+        $ flip runReaderT sock
+        $ flip runStateT (Nothing, [])
+        $ runExceptT (greet >> code)

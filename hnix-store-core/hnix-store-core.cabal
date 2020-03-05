@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     System.Nix.Base32
+                     , System.Nix.Build
                      , System.Nix.Hash
                      , System.Nix.Internal.Base32
                      , System.Nix.Internal.Hash
@@ -29,6 +30,7 @@ library
                      , System.Nix.StorePath
                      , System.Nix.StorePathMetadata
                      , System.Nix.Util
+                     , System.Nix.ValidPath
   build-depends:       base >=4.10 && <5
                      , base16-bytestring
                      , bytestring
@@ -42,8 +44,6 @@ library
                      , filepath
                      , hashable
                      , mtl
-                     , regex-base
-                     , regex-tdfa-text
                      , saltine
                      , time
                      , text
@@ -67,6 +67,7 @@ test-suite format-tests
        Arbitrary
        NarFormat
        Hash
+       StorePath
    hs-source-dirs:
        tests
    build-depends:
@@ -77,6 +78,7 @@ test-suite format-tests
      , binary
      , bytestring
      , containers
+     , filepath
      , directory
      , process
      , tasty
