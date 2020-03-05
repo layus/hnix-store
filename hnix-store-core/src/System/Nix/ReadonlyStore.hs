@@ -58,20 +58,3 @@ makeFixedOutputPath recursive digest name refs =
 computeStorePathForText :: (KnownStoreDir storeDir) => StorePathName -> ByteString -> StorePathSet storeDir -> StorePath storeDir
 computeStorePathForText nm s refs = makeTextPath nm (hash s) refs
 
-data DerivationOutput storeDir = DerivationOutput
-    { path :: StorePath storeDir
-    , drvHash :: Text
-    , hashAlgo :: HashAlgorithm
-    }
-
-data Derivation storeDir = Derivation
-    { name :: StorePathName
-    , outputs :: M.Map Text (StorePath storeDir)
-    , inputSrcs :: HS.HashSet (StorePath storeDir)
-    , inputDrvs :: M.Map (StorePath storeDir) [Text]
-    , platform :: Text
-    , builder :: Text -- should be typed as a store path
-    , args :: [ Text ]
-    , env :: M.Map Text Text
-    }
-
