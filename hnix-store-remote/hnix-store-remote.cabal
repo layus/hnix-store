@@ -22,7 +22,6 @@ library
                      , System.Nix.Store.Remote.Util
 
   build-depends:       base >=4.10 && <5
-                     , cryptonite
                      , bytestring
                      , binary
                      , bytestring

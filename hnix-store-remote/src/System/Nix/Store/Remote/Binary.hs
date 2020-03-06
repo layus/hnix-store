@@ -16,6 +16,16 @@ putInt = putWord64le . fromIntegral
 getInt :: Integral a => Get a
 getInt = fromIntegral <$> getWord64le
 
+putMany :: Foldable t => (a -> Put) -> t a -> Put
+putMany printer xs = do
+  putInt (length xs)
+  mapM_ printer xs
+
+getMany :: Get a -> Get [a]
+getMany parser = do
+  count <- getInt
+  replicateM count parser
+
 -- length prefixed string packing with padding to 8 bytes
 putByteStringLen :: BSL.ByteString -> Put
 putByteStringLen x = do
@@ -29,9 +39,7 @@ putByteStringLen x = do
     pad count = sequence_ $ replicate count (putWord8 0)
 
 putByteStrings :: Foldable t => t BSL.ByteString -> Put
-putByteStrings xs = do
-  putInt $ length xs
-  mapM_ putByteStringLen xs
+putByteStrings = putMany putByteStringLen
 
 getByteStringLen :: Get ByteString
 getByteStringLen = do
@@ -44,8 +52,4 @@ getByteStringLen = do
   where unpad x = sequence $ replicate x getWord8
 
 getByteStrings :: Get [ByteString]
-getByteStrings = do
-  count <- getInt
-  res <- sequence $ replicate count getByteStringLen
-  return res
-
+getByteStrings = getMany getByteStringLen

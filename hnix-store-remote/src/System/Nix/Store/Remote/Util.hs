@@ -132,11 +132,6 @@ putTime = (putInt :: Int -> Put) . round . utcTimeToPOSIXSeconds
 getTime :: Get UTCTime
 getTime = posixSecondsToUTCTime <$> getEnum
 
-getMany :: Get a -> Get [a]
-getMany parser = do
-  count <- getInt
-  replicateM count parser
-
 getBuildResult :: Get BuildResult
 getBuildResult = BuildResult
   <$> getEnum
