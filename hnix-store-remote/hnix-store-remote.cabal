@@ -15,6 +15,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     System.Nix.Store.Remote
+                     , System.Nix.Store.Remote.Binary
                      , System.Nix.Store.Remote.Logger
                      , System.Nix.Store.Remote.Protocol
                      , System.Nix.Store.Remote.Types

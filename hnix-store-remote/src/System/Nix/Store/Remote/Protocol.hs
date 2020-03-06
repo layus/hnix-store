@@ -18,17 +18,15 @@ import           Control.Monad.State
 import           Data.Binary.Get
 import           Data.Binary.Put
 import qualified Data.ByteString.Char8     as BSC
-import qualified Data.ByteString.Lazy      as LBS
-import qualified Data.Text                 as T
+import qualified Data.ByteString.Lazy      as BSL
 
 import           Network.Socket            hiding (send, sendTo, recv, recvFrom)
 import           Network.Socket.ByteString (recv)
 
+import           System.Nix.Store.Remote.Binary
 import           System.Nix.Store.Remote.Logger
 import           System.Nix.Store.Remote.Types
 import           System.Nix.Store.Remote.Util
-import           System.Nix.Util
-import           System.Nix.StorePath
 
 protoVersion :: Int
 protoVersion = 0x115
@@ -124,7 +122,7 @@ simpleOpArgs op args = do
   case err of
     True -> do
       Error _num msg <- head <$> getError
-      throwError $ BSC.unpack $ LBS.toStrict msg
+      throwError $ BSC.unpack msg
     False -> do
       sockGetBool
 
@@ -136,7 +134,7 @@ runOpArgs op args = do
 
   -- Temporary hack for printing the messages destined for nix-daemon socket
   when False $
-    liftIO $ LBS.writeFile "mytestfile2" $ runPut $ do
+    liftIO $ BSL.writeFile "mytestfile2" $ runPut $ do
       putInt $ opNum op
       args
 
@@ -150,7 +148,7 @@ runOpArgs op args = do
   err <- gotError
   when err $ do
     Error _num msg <- head <$> getError
-    throwError $ BSC.unpack $ LBS.toStrict msg
+    throwError $ BSC.unpack msg
 
 runStore :: MonadStore a -> IO (Either String a, [Logger])
 runStore = runStoreOpts defaultSockPath "/nix/store"
@@ -162,12 +160,12 @@ runStoreOpts sockPath storeRootDir code = do
     open path = do
       soc <- socket AF_UNIX Stream 0
       connect soc (SockAddrUnix path)
-      return $ StoreConfig { storeSocket = soc, storeDir = storeRootDir } -- , storeDir = oo }
+      return $ StoreConfig { storeSocket = soc, storeDir = storeRootDir }
     greet = do
       sockPut $ putInt workerMagic1
       soc <- storeSocket <$> ask
       vermagic <- liftIO $ recv soc 16
-      let (magic2, _daemonProtoVersion) = flip runGet (LBS.fromStrict vermagic) $ (,) <$> (getInt :: Get Int) <*> (getInt :: Get Int)
+      let (magic2, _daemonProtoVersion) = flip runGet (BSL.fromStrict vermagic) $ (,) <$> (getInt :: Get Int) <*> (getInt :: Get Int)
       unless (magic2 == workerMagic2) $ error "Worker magic 2 mismatch"
 
       sockPut $ putInt protoVersion -- clientVersion
@@ -177,7 +175,7 @@ runStoreOpts sockPath storeRootDir code = do
       processOutput
 
     run sock =
-      fmap (\(res, (handle, logs)) -> (res, logs))
+      fmap (\(res, (_data, logs)) -> (res, logs))
         $ flip runReaderT sock
         $ flip runStateT (Nothing, [])
         $ runExceptT (greet >> code)

@@ -29,7 +29,6 @@ library
                      , System.Nix.Signature
                      , System.Nix.StorePath
                      , System.Nix.StorePathMetadata
-                     , System.Nix.Util
                      , System.Nix.ValidPath
   build-depends:       base >=4.10 && <5
                      , base16-bytestring

@@ -7,9 +7,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE FlexibleContexts     #-}
 module System.Nix.Store.Remote
-{-
   (
     addToStore
   , addToStoreNar
@@ -36,35 +34,27 @@ module System.Nix.Store.Remote
   , syncWithGC
   , verifyStore
   )
--}
   where
 
 import           Control.Monad
-import           Control.Monad.State
 import           Control.Monad.Except
 import           Control.Monad.IO.Class    (liftIO)
-import qualified Data.Binary               as B
 import qualified Data.Binary.Put           as B
-import           Data.Maybe
-import qualified Data.ByteString.Char8     as BSC
+import           Data.ByteString           (ByteString)
 import qualified Data.ByteString.Lazy      as BSL
 import qualified Data.Map.Strict           as M
-import           Data.Proxy                (Proxy(Proxy))
+import           Data.Proxy                (Proxy)
 import           Data.Text                 (Text)
-import qualified Data.Text.Lazy                 as T
-import qualified Data.Text.Lazy.Encoding        as T
 
 import qualified System.Nix.Build          as Build
-import qualified Nix.Derivation            as Drv
 
---import qualified System.Nix.GC             as GC
 import           System.Nix.Hash           (Digest, ValidAlgo)
 import           System.Nix.StorePath
 import           System.Nix.Hash
 import           System.Nix.Nar            (localPackNar, putNar, narEffectsIO, Nar)
-import           System.Nix.Util
 import           System.Nix.ValidPath
 
+import           System.Nix.Store.Remote.Binary
 import           System.Nix.Store.Remote.Types
 import           System.Nix.Store.Remote.Protocol
 import           System.Nix.Store.Remote.Util
@@ -78,14 +68,14 @@ type SubstituteFlag = Bool
 
 addToStore
   :: forall a. (ValidAlgo a, NamedAlgo a)
-  => StorePathName -- BSL.ByteString
+  => StorePathName
   -> FilePath
   -> Bool
   -> Proxy a
   -> (StorePath -> Bool)
   -> RepairFlag
   -> MonadStore StorePath
-addToStore name pth recursive algoProxy pfilter repair = do
+addToStore name pth recursive _algoProxy pfilter repair = do
 
   -- TODO: Is this lazy enough? We need `B.putLazyByteString bs` to stream `bs`
   bs  :: BSL.ByteString <- liftIO $ B.runPut . putNar <$> localPackNar narEffectsIO pth
@@ -93,7 +83,7 @@ addToStore name pth recursive algoProxy pfilter repair = do
   runOpArgs AddToStore $ do
     putText $ unStorePathName name
 
-    putBool $ not $ algoName @a `elem` ["sha256"] && recursive
+    putBool $ not $ algoName @a == "sha256" && recursive
     putBool recursive
 
     putText $ algoName @a
@@ -161,23 +151,22 @@ ensurePath :: StorePath -> MonadStore ()
 ensurePath pn = do
   void $ simpleOpArgs EnsurePath $ putPath pn
 
-findRoots :: MonadStore (M.Map BSL.ByteString StorePath)
+findRoots :: MonadStore (M.Map ByteString StorePath)
 findRoots = do
   runOp FindRoots
   sd <- getStoreDir
-  res <- getSocketIncremental (do
-      count <- getInt
-      res <- sequence $ replicate count ((,) <$> getByteStringLen <*> getPath sd)
-      return res
-    )
+  res <- getSocketIncremental $ getMany $ (,) <$> getByteStringLen <*> getPath sd
 
   r <- catRights res
   return $ M.fromList $ r
   where
     catRights :: [(a, Either String b)] -> MonadStore [(a, b)]
     catRights = mapM ex
+
+    ex :: (a, Either [Char] b) -> MonadStore (a, b)
     ex (x, Right y) = return (x, y)
-    ex (_x , Left e) = throwError $ "Unable to decode root: "  ++ show e
+    ex (_x , Left e) = throwError $ "Unable to decode root: "  ++ e
+
 
 isValidPathUncached :: StorePath -> MonadStore Bool
 isValidPathUncached p = do
@@ -210,13 +199,13 @@ queryPathInfoUncached path = do
   unless valid $ error "Path is not valid"
 
   deriver <- sockGetPathMay
-  narHash <- lBSToText <$> sockGetStr
+  narHash <- bsToText <$> sockGetStr
   references <- sockGetPaths
   registrationTime <- sockGet getTime
   narSize <- sockGetInt
   ultimate <- sockGetBool
-  sigs <- map lBSToText <$> sockGetStrings
-  ca <- lBSToText <$> sockGetStr
+  sigs <- map bsToText <$> sockGetStrings
+  ca <- bsToText <$> sockGetStr
   return $ ValidPath {..}
 
 queryReferrers :: StorePath -> MonadStore StorePathSet

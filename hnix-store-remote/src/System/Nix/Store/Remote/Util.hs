@@ -13,30 +13,20 @@ import           Data.Text                 (Text)
 import qualified Data.Text                 as T
 import           Data.Time
 import           Data.Time.Clock.POSIX
-import qualified Data.ByteString           as B
+import           Data.ByteString           (ByteString)
 import qualified Data.ByteString.Char8     as BSC
 import qualified Data.ByteString.Lazy      as BSL
-import qualified Data.Map.Strict           as M
-import qualified Data.Set                  as S
-import qualified Data.HashMap.Strict       as HashMap
 import qualified Data.HashSet              as HashSet
-import qualified Data.Vector
 
 import           Network.Socket.ByteString (recv, sendAll)
 
-import           Nix.Derivation
-
-import           System.Nix.Store.Remote.Types
 import           System.Nix.Build
 import           System.Nix.StorePath
-import           System.Nix.Internal.Hash (Digest(..))
-import           System.Nix.Hash
-import           System.Nix.Util
-
-import           System.FilePath.Posix     (takeBaseName, takeDirectory)
+import           System.Nix.Store.Remote.Binary
+import           System.Nix.Store.Remote.Types
 
 
-genericIncremental :: (MonadIO m) => m (Maybe B.ByteString) -> Get a -> m a
+genericIncremental :: (MonadIO m) => m (Maybe ByteString) -> Get a -> m a
 genericIncremental getsome parser = go decoder
   where decoder = runGetIncremental parser
         go (Done _leftover _consumed x) = do
@@ -69,10 +59,10 @@ sockGetInt = getSocketIncremental getInt
 sockGetBool :: MonadStore Bool
 sockGetBool = (== (1 :: Int)) <$> sockGetInt
 
-sockGetStr :: MonadStore BSL.ByteString
+sockGetStr :: MonadStore ByteString
 sockGetStr = getSocketIncremental getByteStringLen
 
-sockGetStrings :: MonadStore [BSL.ByteString]
+sockGetStrings :: MonadStore [ByteString]
 sockGetStrings = getSocketIncremental getByteStrings
 
 sockGetPath :: MonadStore StorePath
@@ -88,7 +78,7 @@ sockGetPathMay = do
   sd <- getStoreDir
   pth <- getSocketIncremental (getPath sd)
   return $ case pth of
-    Left e -> Nothing
+    Left _e -> Nothing
     Right x -> Just x
 
 sockGetPaths :: MonadStore StorePathSet
@@ -96,8 +86,11 @@ sockGetPaths = do
   sd <- getStoreDir
   getSocketIncremental (getPaths sd)
 
-lBSToText :: BSL.ByteString -> Text
-lBSToText = T.pack . BSC.unpack . BSL.toStrict
+bsToText :: ByteString -> Text
+bsToText = T.pack . BSC.unpack
+
+bslToText :: BSL.ByteString -> Text
+bslToText = T.pack . BSC.unpack . BSL.toStrict
 
 textToBSL :: Text -> BSL.ByteString
 textToBSL = BSL.fromStrict . BSC.pack . T.unpack
@@ -109,10 +102,10 @@ putTexts :: [Text] -> Put
 putTexts = putByteStrings . (map textToBSL)
 
 getPath :: FilePath -> Get (Either String StorePath)
-getPath sd = parsePath sd . BSL.toStrict <$> getByteStringLen
+getPath sd = parsePath sd <$> getByteStringLen
 
 getPaths :: FilePath -> Get StorePathSet
-getPaths sd = HashSet.fromList . rights . map (parsePath sd . BSL.toStrict) <$> getByteStrings
+getPaths sd = HashSet.fromList . rights . map (parsePath sd) <$> getByteStrings
 
 putPath :: StorePath -> Put
 putPath  = putByteStringLen . BSL.fromStrict . storePathToRawFilePath
@@ -139,10 +132,15 @@ putTime = (putInt :: Int -> Put) . round . utcTimeToPOSIXSeconds
 getTime :: Get UTCTime
 getTime = posixSecondsToUTCTime <$> getEnum
 
+getMany :: Get a -> Get [a]
+getMany parser = do
+  count <- getInt
+  replicateM count parser
+
 getBuildResult :: Get BuildResult
 getBuildResult = BuildResult
   <$> getEnum
-  <*> (Just . lBSToText <$> getByteStringLen)
+  <*> (Just . bsToText <$> getByteStringLen)
   <*> getInt
   <*> getBool
   <*> getTime

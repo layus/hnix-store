@@ -29,7 +29,7 @@ makeTextPath fp nm h refs = makeStorePath fp ty h nm
   where
     ty = BS.intercalate ":" ("text" : map storePathToRawFilePath (HS.toList refs))
 
-makeFixedOutputPath :: (ValidAlgo hashAlgo, NamedAlgo hashAlgo) => FilePath -> Bool -> Digest hashAlgo -> StorePathName -> StorePath storeDir
+makeFixedOutputPath :: (ValidAlgo hashAlgo, NamedAlgo hashAlgo) => FilePath -> Bool -> Digest hashAlgo -> StorePathName -> StorePath
 makeFixedOutputPath fp recursive h nm =
   makeStorePath fp ty h' nm
   where

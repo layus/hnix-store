@@ -11,12 +11,10 @@ import           Control.Monad.State       (get)
 import           Data.Binary.Get
 
 import           Network.Socket.ByteString (recv)
-import qualified Data.ByteString.Lazy      as LBS
 
+import           System.Nix.Store.Remote.Binary
 import           System.Nix.Store.Remote.Types
 import           System.Nix.Store.Remote.Util
-import           System.Nix.StorePath
-import           System.Nix.Util
 
 controlParser :: Get Logger
 controlParser = do

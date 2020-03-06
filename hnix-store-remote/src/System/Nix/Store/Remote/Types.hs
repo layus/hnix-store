@@ -23,6 +23,7 @@ import           Network.Socket            (Socket)
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
+
 import           System.Nix.StorePath
 
 data StoreConfig = StoreConfig {
@@ -38,16 +39,16 @@ type ActivityType = Int
 type Verbosity = Int
 type ResultType = Int
 
-data Field = LogStr BSL.ByteString | LogInt Int
+data Field = LogStr ByteString | LogInt Int
   deriving (Eq, Ord, Show)
 
 data Logger =
-    Next          BSL.ByteString
+    Next          ByteString
   | Read          Int            -- data needed from source
-  | Write         BSL.ByteString -- data for sink
+  | Write         ByteString -- data for sink
   | Last
-  | Error         Int BSL.ByteString
-  | StartActivity ActivityID Verbosity ActivityType BSL.ByteString [Field] ActivityParentID
+  | Error         Int ByteString
+  | StartActivity ActivityID Verbosity ActivityType ByteString [Field] ActivityParentID
   | StopActivity  ActivityID
   | Result        ActivityID ResultType [Field]
   deriving (Eq, Ord, Show)
