@@ -24,8 +24,6 @@ import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 
-import           System.Nix.StorePath
-
 data StoreConfig = StoreConfig {
     storeDir        :: FilePath
   , storeSocket     :: Socket
