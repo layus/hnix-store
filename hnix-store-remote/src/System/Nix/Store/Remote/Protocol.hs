@@ -143,7 +143,6 @@ runOpArgs op args = do
     args
 
   out <- processOutput
-  liftIO $ print out
   modify (\(a, b) -> (a, b++out))
   err <- gotError
   when err $ do

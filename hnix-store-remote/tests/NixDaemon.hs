@@ -103,8 +103,6 @@ startDaemon :: FilePath -> IO (P.ProcessHandle, MonadStore a -> IO (Either Strin
 startDaemon fp = do
   writeConf (fp </> "etc" </> "nix.conf")
   p <- createProcessEnv fp "nix-daemon" []
-  writeFile "/tmp/spawned" $ show fp
-  threadDelay 0000000
   waitSocket sockFp 30
   return (p, runStoreOpts sockFp (fp </> "store"))
   where
