@@ -13,6 +13,9 @@ Description : Cryptographic hashing interface for hnix-store, on top
 
 module System.Nix.Internal.Hash where
 
+import Debug.Trace (trace)
+import Control.Arrow ((&&&))
+
 import qualified Crypto.Hash.MD5        as MD5
 import qualified Crypto.Hash.SHA1       as SHA1
 import qualified Crypto.Hash.SHA256     as SHA256
@@ -47,7 +50,7 @@ newtype Digest (a :: HashAlgorithm) =
   Digest BS.ByteString deriving (Eq, Ord, DataHashable.Hashable)
 
 instance Show (Digest a) where
-  show = ("Digest " ++) . show . encodeBase32
+  show = ("Digest " ++) . show . (encodeBase32 &&& encodeBase16)
 
 -- | The primitive interface for incremental hashing for a given
 -- 'HashAlgorithm'. Every 'HashAlgorithm' should have an instance.
@@ -121,7 +124,7 @@ mkNamedDigest name hash = case name of
 --   > :set -XTypeApplications
 --   > let d = hash @SHA256 "Hello, sha-256!"
 hash :: forall a.ValidAlgo a => BS.ByteString -> Digest a
-hash bs =
+hash bs = -- (\v -> trace (show v <> " by hashing " <> show bs) v) $ 
   finalize $ update @a (initialize @a) bs
 
 -- | Hash an entire (lazy) 'BSL.ByteString' as a single call.

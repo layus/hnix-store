@@ -39,6 +39,9 @@ module System.Nix.Store.Remote
   )
   where
 
+import Debug.Trace (traceM)
+import qualified Data.Text as T
+
 import Control.Monad (void, unless, when)
 import Control.Monad.IO.Class (MonadIO)
 import Data.ByteString.Lazy (ByteString)
@@ -168,6 +171,7 @@ addTextToStore name text references' repair = do
   when repair $ error "repairing is not supported when building through the Nix daemon"
   runOpArgs AddTextToStore $ do
     putText name
+    traceM $ T.unpack text ++ "\n"
     putText text
     putPaths references'
   sockGetPath
