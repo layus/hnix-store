@@ -11,6 +11,7 @@ import           Data.Binary.Get
 import           Data.Binary.Put
 import           Data.Text                 (Text)
 import qualified Data.Text                 as T
+import qualified Data.Text.Encoding        as T
 import           Data.Time
 import           Data.Time.Clock.POSIX
 import           Data.ByteString           (ByteString)
@@ -91,13 +92,16 @@ sockGetPaths = do
   getSocketIncremental (getPaths sd)
 
 bsToText :: ByteString -> Text
-bsToText = T.pack . BSC.unpack
+bsToText = T.decodeUtf8
 
 bslToText :: BSL.ByteString -> Text
-bslToText = T.pack . BSC.unpack . BSL.toStrict
+bslToText = bsToText . BSL.toStrict
 
 textToBSL :: Text -> BSL.ByteString
-textToBSL = BSL.fromStrict . BSC.pack . T.unpack
+textToBSL = BSL.fromStrict . textToBS
+
+textToBS :: Text -> ByteString
+textToBS = T.encodeUtf8
 
 putText :: Text -> Put
 putText = putByteStringLen . textToBSL
