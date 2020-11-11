@@ -22,7 +22,7 @@ import qualified Data.Vector
 import qualified Nix.Derivation
 import qualified System.Nix.Derivation
 import qualified System.Nix.StorePath
-import qualified System.Which
+-- import qualified System.Which
 
 drvSample :: StorePath -> StorePath -> StorePath -> Derivation StorePath Text
 drvSample builder buildScript out = Derivation {
@@ -36,7 +36,7 @@ drvSample builder buildScript out = Derivation {
   }
 
 withBash action = do
-  mfp <- liftIO $ System.Which.which "bash"
+  mfp <- pure $ Just "/nix/store/xadrr3l5jvkkm3g3lb2g81j5wz51zqdv-bash-interactive-4.4-p23/bin/bash"
   case mfp of
     Nothing -> error "No bash executable found"
     Just fp -> do
